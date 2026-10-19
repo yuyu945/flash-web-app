@@ -27,45 +27,33 @@ jobs:
         continue-on-error: false
       - name: Deploy to Touge Server via SSH (Port 50192)
         run: |
-          set -e
           # 配置SSH环境（强制兼容RSA私钥）
           mkdir -p ~/.ssh
-
-          # 优先使用单行 Base64 Secret，避免多行私钥在粘贴或传输时损坏
-          if [[ -n "$TOUGE_SSH_PRIVATE_KEY_B64" ]]; then
-            printf "%s" "$TOUGE_SSH_PRIVATE_KEY_B64" | base64 --decode > ~/.ssh/id_rsa
-          else
-            # 兼容普通 Secret 中的字面量 \n、Windows 换行符和 UTF-8 BOM
-            private_key="$TOUGE_SSH_PRIVATE_KEY"
-            if [[ "$private_key" == *'\\n'* ]]; then
-              private_key="${private_key//\\n/$'\n'}"
-            fi
-            printf "%s\n" "$private_key" | tr -d '\r' | sed '1s/^\xEF\xBB\xBF//' > ~/.ssh/id_rsa
-          fi
-
+          
+          # 写入RSA私钥（用printf确保格式完整）
+          printf "%s\n" "${{ secrets.TOUGE_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          
           # 强制设置权限（SSH协议要求）
           chmod 600 ~/.ssh/id_rsa
-          ssh-keygen -y -f ~/.ssh/id_rsa > /dev/null
-
+          
           # 扫描主机密钥（指定端口）
           ssh-keyscan -p 50192 -H ${{ secrets.TOUGE_SERVER_IP }} >> ~/.ssh/known_hosts
           echo "SSH环境配置完成，尝试连接服务器..."
           # 连接服务器执行部署（添加-o选项兼容旧版SSH）
-          ssh -v -p 50192 -o BatchMode=yes -o IdentitiesOnly=yes -o HostKeyAlgorithms=+ssh-rsa -o PubkeyAcceptedAlgorithms=+ssh-rsa root@${{ secrets.TOUGE_SERVER_IP }} << 'EOF'
+          ssh -v -p 50192 -o HostKeyAlgorithms=+ssh-rsa -o PubkeyAcceptedAlgorithms=+ssh-rsa root@${{ secrets.TOUGE_SERVER_IP }} << 'EOF'
             set -e
             echo "成功连接服务器：$(whoami)@$(hostname)"
-
+            
             cd /root/flask-web-app || { echo "项目目录不存在"; exit 1; }
             git pull origin main || { echo "Git拉取失败"; exit 1; }
-
+            
             pip3 install --upgrade pip
             pip3 install -r requirements.txt || { echo "依赖安装失败"; exit 1; }
-
+            
             supervisorctl restart flask-web-app || { echo "应用重启失败"; exit 1; }
             supervisorctl status flask-web-app
             echo "部署完成"
           EOF
         env:
           TOUGE_SSH_PRIVATE_KEY: ${{ secrets.TOUGE_SSH_PRIVATE_KEY }}
-          TOUGE_SSH_PRIVATE_KEY_B64: ${{ secrets.TOUGE_SSH_PRIVATE_KEY_B64 }}
           TOUGE_SERVER_IP: ${{ secrets.TOUGE_SERVER_IP }}
