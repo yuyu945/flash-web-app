@@ -1,5 +1,5 @@
 name: Deploy Flask App to Touge Server
-on:
+"on":
   push:
     branches:
       - main
