@@ -31,16 +31,20 @@ jobs:
           # 配置SSH环境（强制兼容RSA私钥）
           mkdir -p ~/.ssh
 
-          # 兼容 Secret 中的字面量 \n、Windows 换行符和 UTF-8 BOM
-          private_key="$TOUGE_SSH_PRIVATE_KEY"
-          if [[ "$private_key" == *'\\n'* ]]; then
-            private_key="${private_key//\\n/$'\n'}"
+          # 优先使用单行 Base64 Secret，避免多行私钥在粘贴或传输时损坏
+          if [[ -n "$TOUGE_SSH_PRIVATE_KEY_B64" ]]; then
+            printf "%s" "$TOUGE_SSH_PRIVATE_KEY_B64" | base64 --decode > ~/.ssh/id_rsa
+          else
+            # 兼容普通 Secret 中的字面量 \n、Windows 换行符和 UTF-8 BOM
+            private_key="$TOUGE_SSH_PRIVATE_KEY"
+            if [[ "$private_key" == *'\\n'* ]]; then
+              private_key="${private_key//\\n/$'\n'}"
+            fi
+            printf "%s\n" "$private_key" | tr -d '\r' | sed '1s/^\xEF\xBB\xBF//' > ~/.ssh/id_rsa
           fi
-          printf "%s\n" "$private_key" | tr -d '\r' | sed '1s/^\xEF\xBB\xBF//' > ~/.ssh/id_rsa
 
           # 强制设置权限（SSH协议要求）
           chmod 600 ~/.ssh/id_rsa
-          ssh-keygen -p -m PEM -P "" -N "" -f ~/.ssh/id_rsa
           ssh-keygen -y -f ~/.ssh/id_rsa > /dev/null
 
           # 扫描主机密钥（指定端口）
@@ -63,4 +67,5 @@ jobs:
           EOF
         env:
           TOUGE_SSH_PRIVATE_KEY: ${{ secrets.TOUGE_SSH_PRIVATE_KEY }}
+          TOUGE_SSH_PRIVATE_KEY_B64: ${{ secrets.TOUGE_SSH_PRIVATE_KEY_B64 }}
           TOUGE_SERVER_IP: ${{ secrets.TOUGE_SERVER_IP }}

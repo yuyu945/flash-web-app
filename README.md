@@ -78,4 +78,12 @@ supervisorctl status flask-web-app
 - `TOUGE_SSH_PRIVATE_KEY`：可无密码登录头歌服务器的 SSH 私钥完整内容。
 - `TOUGE_SERVER_IP`：头歌服务器 IP 地址。
 
+如果多行私钥在 Actions 中出现 `error in libcrypto`，推荐改用单行 Base64 方式：
+
+```bash
+base64 -w 0 ~/.ssh/id_rsa
+```
+
+将命令输出保存为新的 Repository secret `TOUGE_SSH_PRIVATE_KEY_B64`。工作流会优先使用该 Secret，服务器中的 `authorized_keys` 无需修改。
+
 工作流会先安装依赖并运行测试，测试通过后通过 SSH 执行 `git pull`、更新依赖并重启 Supervisor 服务。不要将私钥提交到仓库。
