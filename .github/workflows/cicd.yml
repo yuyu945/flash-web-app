@@ -27,14 +27,20 @@ jobs:
         continue-on-error: false
       - name: Deploy to Touge Server via SSH (Port 50192)
         run: |
+          set -e
           # 配置SSH环境（强制兼容RSA私钥）
           mkdir -p ~/.ssh
 
-          # 去除 Windows 换行符，避免 OpenSSH 报 libcrypto 错误
-          printf "%s" "$TOUGE_SSH_PRIVATE_KEY" | sed 's/\r$//' > ~/.ssh/id_rsa
+          # 兼容 Secret 中的字面量 \n、Windows 换行符和 UTF-8 BOM
+          private_key="$TOUGE_SSH_PRIVATE_KEY"
+          if [[ "$private_key" == *'\\n'* ]]; then
+            private_key="${private_key//\\n/$'\n'}"
+          fi
+          printf "%s\n" "$private_key" | tr -d '\r' | sed '1s/^\xEF\xBB\xBF//' > ~/.ssh/id_rsa
 
           # 强制设置权限（SSH协议要求）
           chmod 600 ~/.ssh/id_rsa
+          ssh-keygen -p -m PEM -P "" -N "" -f ~/.ssh/id_rsa
           ssh-keygen -y -f ~/.ssh/id_rsa > /dev/null
 
           # 扫描主机密钥（指定端口）
